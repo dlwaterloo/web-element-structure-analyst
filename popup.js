@@ -12,7 +12,7 @@ document.getElementById('allElementsButton').addEventListener('click', () => {
         groupedElements.forEach((groupInfo) => {
           const groupDiv = document.createElement('div');
           groupDiv.className = 'element-group';
-          groupDiv.textContent = `Group: ${groupInfo.groupId}`;
+          groupDiv.textContent = `${groupInfo.groupId}`; //Group:
           const groupList = document.createElement('ul');
 
           groupInfo.elements.forEach((element) => {
@@ -25,6 +25,20 @@ document.getElementById('allElementsButton').addEventListener('click', () => {
             checkbox.className = 'elementCheckbox';
             checkbox.dataset.elementId = element[1]; // Unique ID for element
 
+            // Create the "Scroll to Element" button
+            const scrollToElementButton = document.createElement('button');
+            scrollToElementButton.innerText = 'Scroll to Element';
+            scrollToElementButton.style.marginLeft = '10px';
+
+            // Add event listener to scroll to the element
+            scrollToElementButton.addEventListener('click', function() {
+              chrome.scripting.executeScript({
+                target: { tabId: tabs[0].id },
+                func: scrollToElement,
+                args: [element[1]] // Pass the unique ID of the element to scroll to
+              });
+            });
+
             checkbox.addEventListener('change', function() {
               chrome.scripting.executeScript({
                 target: { tabId: tabs[0].id },
@@ -34,6 +48,7 @@ document.getElementById('allElementsButton').addEventListener('click', () => {
             });
 
             elementItem.appendChild(checkbox);
+            elementItem.appendChild(scrollToElementButton); // Append the button to the list item
             groupList.appendChild(elementItem);
           });
 
@@ -45,6 +60,16 @@ document.getElementById('allElementsButton').addEventListener('click', () => {
   });
 });
 
+
+function scrollToElement(uniqueId) {
+  const element = document.querySelector(`[data-highlight-id='${uniqueId}']`);
+  if (element) {
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+
+
 function findAllVisibleElements() {
   let allElements = document.querySelectorAll('body *');
   let visibleElementsInfo = [];
@@ -55,7 +80,8 @@ function findAllVisibleElements() {
     if (element.offsetWidth > 0 && element.offsetHeight > 0) {
       let hasVisibleChild = Array.from(element.children).some(child => child.offsetWidth > 0 && child.offsetHeight > 0);
 
-      if (!hasVisibleChild) {
+      // Check if the element has no visible text content but a tag name exists
+      if (!hasVisibleChild && element.innerText.trim().length > 0) { // Modified condition
         const uniqueId = `visible-${uniqueIdCounter++}`;
         element.setAttribute('data-highlight-id', uniqueId);
         element.style.border = '2px solid blue';
@@ -64,11 +90,11 @@ function findAllVisibleElements() {
         let isClickable = ['a', 'button'].includes(element.tagName.toLowerCase()) || element.getAttribute('role') === 'button';
         let isInput = element.tagName.toLowerCase() === 'input';
         const elementType = isInput ? 'input' : isClickable ? 'clickable' : '';
-        const elementText = element.innerText.trim() ? element.tagName.toLowerCase() + ': ' + element.innerText.trim() : element.tagName.toLowerCase();
+        const elementText = element.tagName.toLowerCase() + ': ' + element.innerText.trim(); // Display tagName: innerText
 
         // Traverse up to the great-great-great-great-great-great-great-great-grandparent if it exists
         let ancestor = element;
-        for (let i = 0; i < 8; i++) { // Look up to 8 levels up the DOM tree
+        for (let i = 0; i < 6; i++) { // Look up to 8 levels up the DOM tree
           if (ancestor.parentElement) {
             ancestor = ancestor.parentElement;
           } else {
@@ -96,6 +122,7 @@ function findAllVisibleElements() {
 
   return visibleElementsInfo;
 }
+
 
 
 
