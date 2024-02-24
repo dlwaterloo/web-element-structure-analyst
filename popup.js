@@ -9,52 +9,14 @@ document.getElementById('allElementsButton').addEventListener('click', () => {
 
       const groupedElements = injectionResults[0]?.result;
       if (groupedElements) {
-        groupedElements.forEach((groupInfo) => {
-          const groupDiv = document.createElement('div');
-          groupDiv.className = 'element-group';
-          groupDiv.textContent = `${groupInfo.groupId}`; //Group:
-          const groupList = document.createElement('ul');
+        // Convert groupedElements to JSON
+        const json = JSON.stringify(groupedElements, null, 2);
 
-          groupInfo.elements.forEach((element) => {
-            const elementItem = document.createElement('li');
-            elementItem.className = 'element';
-            elementItem.textContent = element[0]; // Display tagName: innerText
-
-            const checkbox = document.createElement('input');
-            checkbox.type = 'checkbox';
-            checkbox.className = 'elementCheckbox';
-            checkbox.dataset.elementId = element[1]; // Unique ID for element
-
-            // Create the "Scroll to Element" button
-            const scrollToElementButton = document.createElement('button');
-            scrollToElementButton.innerText = 'Scroll to Element';
-            scrollToElementButton.style.marginLeft = '10px';
-
-            // Add event listener to scroll to the element
-            scrollToElementButton.addEventListener('click', function() {
-              chrome.scripting.executeScript({
-                target: { tabId: tabs[0].id },
-                func: scrollToElement,
-                args: [element[1]] // Pass the unique ID of the element to scroll to
-              });
-            });
-
-            checkbox.addEventListener('change', function() {
-              chrome.scripting.executeScript({
-                target: { tabId: tabs[0].id },
-                func: highlightAndInsertText,
-                args: [this.dataset.elementId, element[2] === 'input' || element[2] === 'clickable']
-              });
-            });
-
-            elementItem.appendChild(checkbox);
-            elementItem.appendChild(scrollToElementButton); // Append the button to the list item
-            groupList.appendChild(elementItem);
-          });
-
-          groupDiv.appendChild(groupList);
-          resultsElement.appendChild(groupDiv);
-        });
+        // Display JSON in a <pre> element for formatting
+        const pre = document.createElement('pre');
+        pre.style.overflow = 'auto';
+        pre.textContent = json;
+        resultsElement.appendChild(pre);
       }
     });
   });
@@ -68,37 +30,28 @@ function scrollToElement(uniqueId) {
   }
 }
 
-
-
 function findAllVisibleElements() {
   let allElements = document.querySelectorAll('body *');
   let visibleElementsInfo = [];
-  let uniqueIdCounter = 0;
   let groups = new Map();
 
   allElements.forEach(element => {
     if (element.offsetWidth > 0 && element.offsetHeight > 0) {
       let hasVisibleChild = Array.from(element.children).some(child => child.offsetWidth > 0 && child.offsetHeight > 0);
 
-      // Check if the element has no visible text content but a tag name exists
-      if (!hasVisibleChild && element.innerText.trim().length > 0) { // Modified condition
-        const uniqueId = `visible-${uniqueIdCounter++}`;
-        element.setAttribute('data-highlight-id', uniqueId);
-        element.style.border = '2px solid blue';
-        element.style.boxSizing = 'border-box';
-
+      if (!hasVisibleChild && element.innerText.trim().length > 0 || element.tagName.toLowerCase() === 'input') {
         let isClickable = ['a', 'button'].includes(element.tagName.toLowerCase()) || element.getAttribute('role') === 'button';
         let isInput = element.tagName.toLowerCase() === 'input';
         const elementType = isInput ? 'input' : isClickable ? 'clickable' : '';
-        const elementText = element.tagName.toLowerCase() + ': ' + element.innerText.trim(); // Display tagName: innerText
+        const elementText = element.innerText.trim().length > 0 ? element.innerText.trim() : element.value;
 
-        // Traverse up to the great-great-great-great-great-great-great-great-grandparent if it exists
+        // Determine a suitable group based on the element's ancestors
         let ancestor = element;
-        for (let i = 0; i < 6; i++) { // Look up to 8 levels up the DOM tree
+        for (let i = 0; i < 8; i++) {
           if (ancestor.parentElement) {
             ancestor = ancestor.parentElement;
           } else {
-            break; // Stop if there are no more ancestors
+            break;
           }
         }
 
@@ -106,24 +59,26 @@ function findAllVisibleElements() {
         let groupElement = ancestor;
         let groupId = groupElement.getAttribute('data-group-id');
         if (!groupId) {
-          groupId = `group-${uniqueIdCounter++}`;
+          groupId = 'group'; // Simplify groupId since it will not be included in the output
           groupElement.setAttribute('data-group-id', groupId);
-          groups.set(groupId, []);
+          if (!groups.has(groupId)) {
+            groups.set(groupId, []);
+          }
         }
-        groups.get(groupId).push([elementText, uniqueId, elementType]);
+        // Modify here to match the requested structure
+        groups.get(groupId).push({ element: elementText, type: element.tagName.toLowerCase() }); 
       }
     }
   });
 
-  // Convert the groups Map to an array of group information
-  groups.forEach((elements, groupId) => {
-    visibleElementsInfo.push({ groupId, elements });
+  // Convert groups to an array without group IDs for JSON serialization
+  let groupedElements = [];
+  groups.forEach((elements) => {
+    groupedElements.push({ elements }); // Omitting groupId in the output
   });
 
-  return visibleElementsInfo;
+  return groupedElements;
 }
-
-
 
 
 
